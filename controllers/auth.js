@@ -1,10 +1,10 @@
-// controllers/auth.js
+// controller/auth.js
 import User from "../DB/models/user.js";
 import { createCustomError } from "../errors/custom-error.js";
 import asyncWrapper from "../middlewares/asyncWrapper.js";
 import jwt from "jsonwebtoken";
 
-// Generate JWT Token
+// Generating JWT Token
 const generateToken = (userId) => {
   return jwt.sign(
     { id: userId },
@@ -22,18 +22,18 @@ export const register = asyncWrapper(
       return next(error);
     }
 
-    // Check if user exists
+    // Checking if user exists
     let user = await User.findOne({ $or: [{ email }, { username }] });
     if (user) {
       const error = createCustomError('User already exists', 409);
       return next(error);
     }
 
-    // Create user
+    // Creating user
     user = new User({ username, email, password });
     await user.save();
 
-    // Generate token
+    // Generateing token
     const token = generateToken(user._id);
 
     res.status(201).json({

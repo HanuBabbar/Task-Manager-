@@ -5,7 +5,7 @@ const errorHandler = (error, req, res, next) => {
         return res.status(error.statusCode).json({ message: error.message });
     }
 
-    // For non-custom errors, return a readable message. Include stack only in development.
+    // For non-custom errors, return a readable message. Include stack only in developmentation.
     const message = error && (error.message || String(error)) ? (error.message || String(error)) : 'Internal Server Error';
     const payload = { message };
     if (process.env.NODE_ENV !== 'production' && error && error.stack) payload.stack = error.stack;

@@ -11,7 +11,7 @@ const authPassword = document.getElementById('auth-password')
 const authSubmit = document.getElementById('auth-submit')
 const authAlert = document.getElementById('auth-alert')
 const logoutBtn = document.getElementById('logout-btn')
-// header username element removed; we only render into the sidebar
+// header username element removed; we only render into the sidebar in
 
 const tasksDOM = document.querySelector('.tasks')
 const loadingDOM = document.querySelector('.loading-text')
