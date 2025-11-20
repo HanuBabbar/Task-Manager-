@@ -22,14 +22,14 @@ export const register = asyncWrapper(
       return next(error);
     }
 
-    // Checking if user exists
+    // Check if user exists
     let user = await User.findOne({ $or: [{ email }, { username }] });
     if (user) {
       const error = createCustomError('User already exists', 409);
       return next(error);
     }
 
-    // Creating user
+    // Creating users
     user = new User({ username, email, password });
     await user.save();
 
