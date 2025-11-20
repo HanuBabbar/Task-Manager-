@@ -1,87 +1,122 @@
-// controller/auth.js
-import User from "../DB/models/user.js";
+// controllers/task.js
+import task from "../DB/models/task.js"
 import { createCustomError } from "../errors/custom-error.js";
 import asyncWrapper from "../middlewares/asyncWrapper.js";
-import jwt from "jsonwebtoken";
+import { getIO } from "../socket.js";
 
-// Generating JWT Token
-const generateToken = (userId) => {
-  return jwt.sign(
-    { id: userId },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-  );
-};
-
-export const register = asyncWrapper(
-  async (req, res, next) => {
-    const { username, email, password } = req.body;
-
-    if (!process.env.JWT_SECRET) {
-      const error = createCustomError('Server misconfiguration: JWT secret is not set', 500);
-      return next(error);
+export const getAllTasks = asyncWrapper(
+    async (req, res) => {
+        // Only get tasks for the logged-in user
+        const tasks = await task.find({ user: req.user.id });
+        res.status(200).json({ tasks });
     }
-
-    // Check if user exists
-    let user = await User.findOne({ $or: [{ email }, { username }] });
-    if (user) {
-      const error = createCustomError('User already exists', 409);
-      return next(error);
-    }
-
-    // Creating users
-    user = new User({ username, email, password });
-    await user.save();
-
-    // Generateing token
-    const token = generateToken(user._id);
-
-    res.status(201).json({
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email
-      }
-    });
-  }
 );
 
-export const login = asyncWrapper(
-  async (req, res, next) => {
-    const { email, password } = req.body;
+export const getTask = asyncWrapper(
+    async (req, res, next) => {
+        const { id } = req.params;
+        // Only find task if it belongs to the logged-in user
+        const singleTask = await task.findOne({ _id: id, user: req.user.id });
 
-    // Check if user exists
-    const user = await User.findOne({ email });
-    if (!user) {
-      const error = createCustomError('Invalid credentials', 401);
-      return next(error);
+        if (singleTask) {
+            return res.status(200).json({ singleTask });
+        }
+
+        const error = createCustomError('Task Not Found', 404);
+        next(error);
     }
-
-    // Check password
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      const error = createCustomError('Invalid credentials', 401);
-      return next(error);
-    }
-
-    // Generate token
-    const token = generateToken(user._id);
-
-    res.json({
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email
-      }
-    });
-  }
 );
 
-export const me = asyncWrapper(
-  async (req, res) => {
-    // `auth` middleware attaches the user to req.user (without password)
-    return res.json({ user: req.user });
-  }
+export const editTask = asyncWrapper(
+    async (req, res, next) => {
+        const { id } = req.params;
+        
+        // Find task and verify it belongs to the user
+        const targetTask = await task.findOne({ _id: id, user: req.user.id });
+
+        // check if the task not found
+        if (!targetTask) {
+            const error = createCustomError('Task Not Found', 404);
+            return next(error);
+        }
+
+        // update the chosen one
+        const updatedTask = await task.findOneAndUpdate(
+            { _id: id, user: req.user.id }, 
+            req.body, 
+            {
+                new: true,
+                runValidators: true
+            }
+        );
+
+        try {
+            const io = getIO();
+            io.to(`user:${req.user.id}`).emit('task:updated', updatedTask);
+        } catch (err) {
+            // socket not initialized or emit failed, ignore
+        }
+
+        return res.status(200).json({ message: `task updated successfully!`, updatedTask });
+    }
+);
+
+export const addTask = asyncWrapper(
+    async (req, res, next) => {
+        const { name } = req.body;
+        
+        // Check if this task name already exists FOR THIS USER
+        const foundTask = await task.findOne({ name, user: req.user.id });
+
+        // check if this task is already existed
+        if (foundTask) {
+            const error = createCustomError(`this task name already existed!`, 409);
+            return next(error);
+        }
+
+        // Create task with user reference
+        const newTask = await task.create({
+            ...req.body,
+            user: req.user.id
+        });
+
+        try {
+            const io = getIO();
+            io.to(`user:${req.user.id}`).emit('task:added', newTask);
+        } catch (err) {
+            // ignore if socket not ready
+        }
+
+        return res.status(201).json({
+            message: 'added new task successfully!',
+            newTask
+        });
+    }
+);
+
+export const deleteTask = asyncWrapper(
+    async (req, res, next) => {
+        const { id } = req.params;
+        
+        // Find task and verify it belongs to the user
+        const singleTask = await task.findOne({ _id: id, user: req.user.id });
+
+        // check if the task found to delete
+        if (!singleTask) {
+            const error = createCustomError('Task Not Found to delete!', 404);
+            return next(error);
+        }
+
+        // delete the chosen one
+        await task.findOneAndDelete({ _id: id, user: req.user.id });
+
+        try {
+            const io = getIO();
+            io.to(`user:${req.user.id}`).emit('task:deleted', { id });
+        } catch (err) {
+            // ignore
+        }
+
+        return res.status(200).json({ message: 'Task Deleted Successfully!' });
+    }
 );
